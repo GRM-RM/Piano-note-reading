@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>识谱练习</title>
+  <style>
+    :root {
+      --ink: #1c1a17;
+      --paper: #f4efe4;
+      --line: #2a2622;
+      --key: 48px;
+      --green: #2f7d4a;
+      --green-key: #9ed4ae;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+    }
+
+    body {
+      min-height: 100dvh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .ranges {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 12px 12px 4px;
+    }
+
+    .ranges button {
+      min-height: 44px;
+      border: 1px solid #c8bfae;
+      border-radius: 10px;
+      background: #fffdf8;
+      color: var(--ink);
+      font: inherit;
+      font-size: 16px;
+    }
+
+    .ranges button[aria-pressed="true"] {
+      background: var(--ink);
+      color: #f4efe4;
+      border-color: var(--ink);
+    }
+
+    .staff-panel {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0 8px;
+    }
+
+    #staff {
+      width: 100%;
+    }
+
+    .staff-panel svg {
+      width: 100%;
+      height: auto;
+      max-height: 52dvh;
+    }
+
+    .prompt {
+      margin: 4px 0 0;
+      min-height: 1.5em;
+      font-size: 1.35rem;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+    }
+
+    .stats {
+      margin: 0;
+      padding: 8px 12px 10px;
+      text-align: center;
+      font-size: 1.05rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .keyboard-wrap {
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      touch-action: pan-x;
+      padding-bottom: calc(10px + env(safe-area-inset-bottom));
+      background: #ebe4d6;
+      border-top: 1px solid #d9d0c0;
+    }
+
+    .keyboard {
+      position: relative;
+      display: flex;
+      align-items: stretch;
+      height: 168px;
+      width: max-content;
+      min-width: 100%;
+      margin: 0 auto;
+    }
+
+    .white {
+      flex: 0 0 var(--key);
+      width: var(--key);
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      border: 1px solid #2a2622;
+      border-left-width: 0;
+      background: linear-gradient(#fff, #f2f2f2);
+      border-radius: 0 0 7px 7px;
+      position: relative;
+      z-index: 1;
+      scroll-snap-align: start;
+    }
+
+    .white:first-child { border-left-width: 1px; }
+
+    .white.is-down { background: #c9daf6; }
+
+    .white.is-target {
+      background: var(--green-key);
+      z-index: 2;
+    }
+
+    .middle-c .mark {
+      position: absolute;
+      left: 2px;
+      right: 2px;
+      bottom: 8px;
+      color: #9d2c24;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.15;
+      pointer-events: none;
+    }
+
+    .middle-c .mark::before {
+      content: "";
+      display: block;
+      width: 8px;
+      height: 8px;
+      margin: 0 auto 3px;
+      border-radius: 50%;
+      background: #c23b2e;
+    }
+
+    .black {
+      position: absolute;
+      top: 0;
+      width: calc(var(--key) * 0.58);
+      height: 58%;
+      border: 0;
+      padding: 0;
+      background: #1a1a1a;
+      border-radius: 0 0 4px 4px;
+      z-index: 3;
+    }
+
+    .black.is-down { background: #3a3a3a; }
+
+    .gate {
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 24px;
+      background: rgba(244, 239, 228, 0.97);
+      text-align: center;
+    }
+
+    .gate p {
+      margin: 0;
+      max-width: 22rem;
+      line-height: 1.5;
+    }
+
+    .gate button {
+      min-width: 148px;
+      min-height: 52px;
+      border: 0;
+      border-radius: 12px;
+      background: var(--green);
+      color: white;
+      font: inherit;
+      font-size: 1.25rem;
+    }
+
+    .gate[hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <div class="ranges" id="ranges"></div>
+  <div class="staff-panel">
+    <div id="staff"></div>
+    <p class="prompt" id="prompt">点「开始」后出题</p>
+  </div>
+  <p class="stats" id="stats">0 题 · 对 0 · —</p>
+  <div class="keyboard-wrap" id="keyboardWrap">
+    <div class="keyboard" id="keyboard"></div>
+  </div>
+  <div class="gate" id="gate">
+    <p>看谱，点对应的白键。用 Safari 或 Chrome 打开。点开始后才会出声。</p>
+    <button type="button" id="start">开始</button>
+  </div>
+  <script>
+    var LETTERS = ["C", "D", "E", "F", "G", "A", "B"];
+    var SEMI = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+    var STEP = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+    var GAP = 16;
+    var TREBLE_BOTTOM = 100;
+    var NOTE_X = 248;
+
+    var RANGES = [
+      { id: "middle", label: "中央C附近", from: "F3", to: "G4", c4: "either" },
+      { id: "treble", label: "只高音", from: "C4", to: "F5", c4: "treble" },
+      { id: "bass", label: "只低音", from: "G2", to: "C4", c4: "bass" },
+      { id: "all", label: "全部入门", from: "G2", to: "F5", c4: "either" }
+    ];
+
+    var rangeId = "middle";
+    var started = false;
+    var busy = false;
+    var phase = "idle";
+    var current = null;
+    var previousKey = "";
+    var answered = 0;
+    var correctFirst = 0;
+    var totalMs = 0;
+    var shownAt = 0;
+    var audioCtx = null;
+    var advanceTimer = 0;
+
+    var rangesEl = document.getElementById("ranges");
+    var staffEl = document.getElementById("staff");
+    var promptEl = document.getElementById("prompt");
+    var statsEl = document.getElementById("stats");
+    var keyboardEl = document.getElementById("keyboard");
+    var keyboardWrap = document.getElementById("keyboardWrap");
+    var gateEl = document.getElementById("gate");
+
+    function midiOf(name) {
+      return (Number(name.slice(1)) + 1) * 12 + SEMI[name[0]];
+    }
+
+    function diatonic(name) {
+      return (Number(name.slice(1)) - 4) * 7 + STEP[name[0]];
+    }
+
+    function shiftWhite(name, delta) {
+      var index = LETTERS.indexOf(name[0]);
+      var octave = Number(name.slice(1));
+      index += delta;
+      while (index < 0) {
+        index += 7;
+        octave -= 1;
+      }
+      while (index > 6) {
+        index -= 7;
+        octave += 1;
+      }
+      return LETTERS[index] + octave;
+    }
+
+    function whitesBetween(from, to) {
+      var notes = [];
+      var name = from;
+      var guard = 0;
+      while (guard < 40) {
+        notes.push(name);
+        if (name === to) break;
+        name = shiftWhite(name, 1);
+        guard += 1;
+      }
+      return notes;
+    }
+
+    function rangeById(id) {
+      for (var i = 0; i < RANGES.length; i += 1) {
+        if (RANGES[i].id === id) return RANGES[i];
+      }
+      return RANGES[0];
+    }
+
+    function clefFor(name, spec) {
+      if (name === "C4") {
+        if (spec.c4 === "treble") return "treble";
+        if (spec.c4 === "bass") return "bass";
+        return Math.random() < 0.5 ? "treble" : "bass";
+      }
+      return midiOf(name) < 60 ? "bass" : "treble";
+    }
+
+    function pickQuestion() {
+      var spec = rangeById(rangeId);
+      var names = whitesBetween(spec.from, spec.to);
+      var pool = [];
+      for (var i = 0; i < names.length; i += 1) {
+        if (names[i] === "C4" && spec.c4 === "either") {
+          pool.push({ name: "C4", clef: "treble" });
+          pool.push({ name: "C4", clef: "bass" });
+        } else {
+          pool.push({ name: names[i], clef: clefFor(names[i], spec) });
+        }
+      }
+      var choice = pool[0];
+      for (var n = 0; n < 12; n += 1) {
+        choice = pool[Math.floor(Math.random() * pool.length)];
+        var key = choice.name + "|" + choice.clef;
+        if (key !== previousKey || pool.length === 1) break;
+      }
+      previousKey = choice.name + "|" + choice.clef;
+      return choice;
+    }
+
+    function staffBottom(clef) {
+      if (clef === "treble") return TREBLE_BOTTOM;
+      return TREBLE_BOTTOM + GAP + GAP + 4 * GAP;
+    }
+
+    function slotOf(question) {
+      var step = diatonic(question.name);
+      if (question.clef === "treble") return step - 2;
+      return step + 10;
+    }
+
+    function yOf(question) {
+      var bottom = staffBottom(question.clef);
+      return bottom - slotOf(question) * (GAP / 2);
+    }
+
+    function renderStaff() {
+      var trebleBottom = TREBLE_BOTTOM;
+      var bassBottom = staffBottom("bass");
+      var lines = "";
+      for (var i = 0; i < 5; i += 1) {
+        var ty = trebleBottom - i * GAP;
+        var by = bassBottom - i * GAP;
+        lines += '<path d="M58 ' + ty + " H372 M58 " + by + ' H372" fill="none" stroke="#241f1a" stroke-width="1.4"/>';
+      }
+      var note = "";
+      if (current && started) {
+        var y = yOf(current);
+        var slot = slotOf(current);
+        var ledger = "";
+        if (slot <= -2) {
+          for (var s = -2; s >= slot; s -= 2) {
+            var ly = staffBottom(current.clef) - s * (GAP / 2);
+            ledger += '<path d="M' + (NOTE_X - 20) + " " + ly + " H" + (NOTE_X + 20) + '" stroke="#241f1a" stroke-width="1.5"/>';
+          }
+        }
+        if (slot >= 10) {
+          for (var s2 = 10; s2 <= slot; s2 += 2) {
+            var ly2 = staffBottom(current.clef) - s2 * (GAP / 2);
+            ledger += '<path d="M' + (NOTE_X - 20) + " " + ly2 + " H" + (NOTE_X + 20) + '" stroke="#241f1a" stroke-width="1.5"/>';
+          }
+        }
+        note = ledger +
+          '<ellipse cx="' + NOTE_X + '" cy="' + y + '" rx="10" ry="7.2" fill="none" stroke="#241f1a" stroke-width="2.1" transform="rotate(-18 ' + NOTE_X + " " + y + ')"/>';
+      }
+      staffEl.innerHTML =
+        '<svg viewBox="0 0 400 236" role="img" aria-label="大谱表">' +
+          '<path d="M30 36 C16 40 14 96 26 116 C14 136 16 196 30 200" fill="none" stroke="#241f1a" stroke-width="2.2" stroke-linecap="round"/>' +
+          lines +
+          trebleClef() +
+          bassClef() +
+          note +
+        "</svg>";
+    }
+
+    function trebleClef() {
+      return '<path fill="none" stroke="#241f1a" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" d="M80 120 C80 100 96 90 100 76 C106 56 98 38 84 36 C70 34 62 50 70 62 C78 74 94 68 96 54 C98 44 86 42 82 52 C86 66 102 72 100 88 C98 104 84 114 76 128 C72 136 82 140 86 130"/>';
+    }
+
+    function bassClef() {
+      var fLine = staffBottom("bass") - 3 * GAP;
+      return '<g fill="none" stroke="#241f1a" stroke-width="3.2" stroke-linecap="round">' +
+        '<path d="M78 ' + (fLine - 34) + " C58 " + (fLine - 28) + " 50 " + (fLine - 6) + " 58 " + (fLine + 16) + " C66 " + (fLine + 36) + " 96 " + (fLine + 28) + " 96 " + (fLine + 6) + " C96 " + (fLine - 12) + " 74 " + (fLine - 8) + " 74 " + fLine + '"/>' +
+        "</g>" +
+        '<circle cx="108" cy="' + (fLine - 8) + '" r="3.3" fill="#241f1a"/>' +
+        '<circle cx="108" cy="' + (fLine + 8) + '" r="3.3" fill="#241f1a"/>';
+    }
+
+    function pianoWhites() {
+      var names = ["A0", "B0"];
+      for (var octave = 1; octave <= 7; octave += 1) {
+        for (var i = 0; i < LETTERS.length; i += 1) names.push(LETTERS[i] + octave);
+      }
+      names.push("C8");
+      return names;
+    }
+
+    function renderKeyboard() {
+      var names = pianoWhites();
+      var html = "";
+      for (var i = 0; i < names.length; i += 1) {
+        var middle = names[i] === "C4";
+        html += '<button type="button" class="white' + (middle ? " middle-c" : "") + '" data-note="' + names[i] + '" aria-label="' + names[i] + '">';
+        if (middle) html += '<span class="mark">中央C</span>';
+        html += "</button>";
+      }
+      for (var g = 0; g < names.length - 1; g += 1) {
+        var letter = names[g][0];
+        if (letter === "E" || letter === "B") continue;
+        html += '<button type="button" class="black" data-black="1" data-index="' + (g + 1) + '" aria-label="黑键"></button>';
+      }
+      keyboardEl.innerHTML = html;
+      layoutKeys();
+      scrollRangeIntoView();
+      if (phase === "correcting" && current) highlightCorrect();
+    }
+
+    function scrollRangeIntoView() {
+      var spec = rangeById(rangeId);
+      var keys = keyboardEl.querySelectorAll(".white");
+      var first = null;
+      var last = null;
+      for (var i = 0; i < keys.length; i += 1) {
+        var note = keys[i].getAttribute("data-note");
+        if (note === spec.from) first = keys[i];
+        if (note === spec.to) last = keys[i];
+      }
+      if (!first || !last) return;
+      var mid = (first.offsetLeft + last.offsetLeft + last.offsetWidth) / 2;
+      keyboardWrap.scrollLeft = Math.max(0, mid - keyboardWrap.clientWidth / 2);
+    }
+
+    function layoutKeys() {
+      var buttons = keyboardEl.querySelectorAll(".white");
+      var count = buttons.length || 1;
+      var width = Math.max(44, Math.floor(keyboardWrap.clientWidth / count));
+      document.documentElement.style.setProperty("--key", width + "px");
+      var blacks = keyboardEl.querySelectorAll(".black");
+      var blackWidth = width * 0.58;
+      for (var i = 0; i < blacks.length; i += 1) {
+        var index = Number(blacks[i].getAttribute("data-index"));
+        blacks[i].style.left = (index * width - blackWidth / 2) + "px";
+      }
+    }
+
+    function renderStats() {
+      var average = answered ? (totalMs / answered / 1000).toFixed(1) + " 秒" : "—";
+      statsEl.textContent = answered + " 题 · 对 " + correctFirst + " · " + average;
+    }
+
+    function renderRanges() {
+      var html = "";
+      for (var i = 0; i < RANGES.length; i += 1) {
+        var pressed = RANGES[i].id === rangeId ? "true" : "false";
+        html += '<button type="button" data-range="' + RANGES[i].id + '" aria-pressed="' + pressed + '">' + RANGES[i].label + "</button>";
+      }
+      rangesEl.innerHTML = html;
+    }
+
+    function highlightCorrect() {
+      var keys = keyboardEl.querySelectorAll(".white");
+      var target = null;
+      for (var i = 0; i < keys.length; i += 1) {
+        var match = keys[i].getAttribute("data-note") === current.name;
+        keys[i].classList.toggle("is-target", match);
+        if (match) target = keys[i];
+      }
+      if (target) target.scrollIntoView({ inline: "center", block: "nearest" });
+    }
+
+    function clearTarget() {
+      var keys = keyboardEl.querySelectorAll(".is-target");
+      for (var i = 0; i < keys.length; i += 1) keys[i].classList.remove("is-target");
+    }
+
+    function showQuestion() {
+      window.clearTimeout(advanceTimer);
+      busy = false;
+      phase = "question";
+      current = pickQuestion();
+      shownAt = performance.now();
+      promptEl.textContent = "点对应的白键";
+      clearTarget();
+      renderStaff();
+    }
+
+    function finishCorrect(button) {
+      playPitch(current.name);
+      button.classList.add("is-target");
+      busy = true;
+      phase = "advance";
+      advanceTimer = window.setTimeout(showQuestion, 480);
+    }
+
+    function onWhiteKey(button) {
+      if (!started || busy || !current) return;
+      var note = button.getAttribute("data-note");
+      var correct = note === current.name;
+      if (phase === "correcting") {
+        if (correct) finishCorrect(button);
+        return;
+      }
+      answered += 1;
+      totalMs += performance.now() - shownAt;
+      if (correct) correctFirst += 1;
+      renderStats();
+      if (correct) {
+        finishCorrect(button);
+        return;
+      }
+      phase = "correcting";
+      promptEl.textContent = "是 " + current.name;
+      highlightCorrect();
+    }
+
+    function playPitch(name) {
+      if (!audioCtx) return;
+      var now = audioCtx.currentTime;
+      var osc = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 440 * Math.pow(2, (midiOf(name) - 69) / 12);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.58);
+    }
+
+    function unlockAudio() {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      if (!audioCtx) audioCtx = new Ctx();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+    }
+
+    rangesEl.addEventListener("click", function (event) {
+      var button = event.target.closest("button");
+      if (!button) return;
+      rangeId = button.getAttribute("data-range");
+      renderRanges();
+      scrollRangeIntoView();
+      if (started) showQuestion();
+    });
+
+    keyboardEl.addEventListener("pointerdown", function (event) {
+      var button = event.target.closest("button");
+      if (!button) return;
+      button.classList.add("is-down");
+    });
+
+    keyboardEl.addEventListener("pointerup", clearDown);
+    keyboardEl.addEventListener("pointercancel", clearDown);
+
+    function clearDown() {
+      var down = keyboardEl.querySelectorAll(".is-down");
+      for (var i = 0; i < down.length; i += 1) down[i].classList.remove("is-down");
+    }
+
+    keyboardEl.addEventListener("click", function (event) {
+      var button = event.target.closest("button");
+      if (!button) return;
+      if (button.getAttribute("data-black") === "1") return;
+      onWhiteKey(button);
+    });
+
+    document.getElementById("start").addEventListener("click", function () {
+      unlockAudio();
+      started = true;
+      gateEl.hidden = true;
+      showQuestion();
+    });
+
+    window.addEventListener("resize", layoutKeys);
+
+    renderRanges();
+    renderStaff();
+    renderKeyboard();
+    renderStats();
+  </script>
+</body>
+</html>
